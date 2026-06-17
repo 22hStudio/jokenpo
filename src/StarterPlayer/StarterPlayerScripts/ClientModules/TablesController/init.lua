@@ -37,6 +37,12 @@ function TablesController:ReconfigureAllProxities()
 	end
 end
 
+function TablesController:PlaySolo()
+	local result = bridge:InvokeServerAsync({
+		[actionIdentifier] = "PlaySolo",
+	})
+end
+
 function TablesController:ConfigureAllProximities()
 	local character = player.Character
 

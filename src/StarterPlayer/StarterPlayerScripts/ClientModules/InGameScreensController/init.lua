@@ -225,6 +225,7 @@ function InGameScreensController:CreateReferences()
 	screenElements["WAIT_FOR_ANOTHER_PLAYER"] = {
 		["LEAVEL_BUTTON"] = UIReferences:GetReference("LEAVE_BUTTON"),
 		["INVITE_FRIENDS"] = UIReferences:GetReference("INVITE_FRIENDS_BUTTON"),
+		["PLAY_SOLO_BUTTON"] = UIReferences:GetReference("PLAY_SOLO_BUTTON"),
 	}
 
 	-- Tela de Iniciando Jogo
@@ -310,6 +311,7 @@ function InGameScreensController:ConfigureButtonScreens()
 	local function configureWaitForAnotherPlayers()
 		local leavelButton = screenElements["WAIT_FOR_ANOTHER_PLAYER"]["LEAVEL_BUTTON"]
 		local inviteFriendsButton = screenElements["WAIT_FOR_ANOTHER_PLAYER"]["INVITE_FRIENDS"]
+		local playSoloButton = screenElements["WAIT_FOR_ANOTHER_PLAYER"]["PLAY_SOLO_BUTTON"]
 
 		leavelButton.MouseButton1Click:Connect(function()
 			InGameScreensController:CloseAllScreen()
@@ -317,6 +319,10 @@ function InGameScreensController:ConfigureButtonScreens()
 			CameraController:StopCamera()
 			HudController:Show()
 			TablesController:ReconfigureAllProxities()
+		end)
+
+		playSoloButton.MouseButton1Click:Connect(function()
+			TablesController:PlaySolo()
 		end)
 
 		inviteFriendsButton.MouseButton1Click:Connect(function()

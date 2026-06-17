@@ -1,6 +1,7 @@
 local TableService = {}
 
 -- Init Bridg Net
+local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Utility = ReplicatedStorage.Utility
@@ -50,7 +51,33 @@ function TableService:InitBridgeListener()
 		if data[actionIdentifier] == "ExitTable" then
 			TableService:RemovePlayerFromTable(player)
 		end
+
+		if data[actionIdentifier] == "PlaySolo" then
+			print("Teste")
+			TableService:RunPlaySolo(player)
+		end
 	end
+end
+
+function TableService:RunPlaySolo(player)
+	-- Pega a mesa que o jogador está
+	local tableIndex = TableService:GetTableIndexFromPlayer(player)
+
+	-- Em Play Solo, o jogador sempre vai ocupar o posicao 1
+	-- Atualiza o Player 2 para IA
+	tables[tableIndex][2].Player = "IA"
+	local chair = tables[tableIndex][2].Chair
+
+	local npc = UtilService:CreateRandomAvatar()
+	npc.Parent = workspace
+
+	local humanoid = npc:FindFirstChildOfClass("Humanoid")
+	humanoid.DisplayName = "AI"
+
+	npc:PivotTo(chair.CFrame)
+	chair:Sit(npc:FindFirstChildOfClass("Humanoid"))
+
+	-- Sortear uma Skin Aleatoria e colocar pra sentar na cadeira
 end
 
 function TableService:SitPlayer(player: Player, tableNumber: number, sitNumber: number)
@@ -155,6 +182,15 @@ function TableService:RemovePlayerFromTable(player: Player)
 		bridge:Fire(player, {
 			[actionIdentifier] = "UnfreezePlayerSitted",
 		})
+	end
+end
+
+function TableService:GetTableIndexFromPlayer(player: Player)
+	for index, table in tables do
+		local chair1, chair2 = table[1], table[2]
+		if chair1.Player == player or chair2.Player == player then
+			return index
+		end
 	end
 end
 

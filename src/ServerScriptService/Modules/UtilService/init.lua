@@ -164,4 +164,20 @@ function UtilService:DeepCopy(tbl)
 	return copy
 end
 
+function UtilService:CreateRandomAvatar()
+	while true do
+		local randomUserId = math.random(1, 1000000000)
+
+		local success, result = pcall(function()
+			local description = Players:GetHumanoidDescriptionFromUserId(randomUserId)
+
+			return Players:CreateHumanoidModelFromDescription(description, Enum.HumanoidRigType.R15)
+		end)
+
+		if success then
+			return result
+		end
+	end
+end
+
 return UtilService
