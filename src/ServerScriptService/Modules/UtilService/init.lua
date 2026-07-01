@@ -175,7 +175,7 @@ function UtilService:CreateRandomAvatar()
 		end)
 
 		if success then
-			return result
+			return randomUserId, result
 		end
 	end
 end

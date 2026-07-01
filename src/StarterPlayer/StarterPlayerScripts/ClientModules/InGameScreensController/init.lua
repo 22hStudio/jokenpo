@@ -151,7 +151,12 @@ function InGameScreensController:ExecuteFunctionFromServer(functionName, respons
 					item.ImageLabel.Image = ""
 					item.UIStrokeBlack.Enabled = false
 					item.UIStrokeGreen.Enabled = true
-					item.ImageLabel.Image = ClientUtil:GetThumb(winner.UserId)
+					if winner.Name == "IA" then
+						local npcId = winner:GetAttribute("ID")
+						item.ImageLabel.Image = ClientUtil:GetThumb(npcId)
+					else
+						item.ImageLabel.Image = ClientUtil:GetThumb(winner.UserId)
+					end
 				end)
 			end
 

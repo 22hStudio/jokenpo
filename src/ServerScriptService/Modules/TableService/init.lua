@@ -6,13 +6,17 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Utility = ReplicatedStorage.Utility
 local BridgeNet2 = require(Utility.BridgeNet2)
-local UtilService = require(ServerScriptService.Modules.UtilService)
-local MatchService = require(ServerScriptService.Modules.MatchService)
+
 local bridge = BridgeNet2.ReferenceBridge("TableService")
 local actionIdentifier = BridgeNet2.ReferenceIdentifier("action")
 local statusIdentifier = BridgeNet2.ReferenceIdentifier("status")
 local messageIdentifier = BridgeNet2.ReferenceIdentifier("message")
 -- End Bridg Net
+
+-- Services
+local UtilService = require(ServerScriptService.Modules.UtilService)
+local MatchService = require(ServerScriptService.Modules.MatchService)
+local FolderService = require(ServerScriptService.Modules.FolderService)
 
 local tables = {}
 
@@ -53,7 +57,6 @@ function TableService:InitBridgeListener()
 		end
 
 		if data[actionIdentifier] == "PlaySolo" then
-			print("Teste")
 			TableService:RunPlaySolo(player)
 		end
 	end
@@ -68,8 +71,11 @@ function TableService:RunPlaySolo(player)
 	tables[tableIndex][2].Player = "IA"
 	local chair = tables[tableIndex][2].Chair
 
-	local npc = UtilService:CreateRandomAvatar()
-	npc.Parent = workspace
+	-- Sortear uma Skin Aleatoria e colocar pra sentar na cadeira
+	local npcId, npc = UtilService:CreateRandomAvatar()
+	npc.Name = "IA"
+	npc.Parent = FolderService:GetNpcFolder(player)
+	npc:SetAttribute("ID", npcId)
 
 	local humanoid = npc:FindFirstChildOfClass("Humanoid")
 	humanoid.DisplayName = "AI"
@@ -77,7 +83,11 @@ function TableService:RunPlaySolo(player)
 	npc:PivotTo(chair.CFrame)
 	chair:Sit(npc:FindFirstChildOfClass("Humanoid"))
 
-	-- Sortear uma Skin Aleatoria e colocar pra sentar na cadeira
+	-- Inicia a Partida
+	player:SetAttribute("PLAYER_SOLO", true)
+
+	-- Cria a Partida
+	MatchService:CreateFromPlayerSolo(player, npc, tableIndex)
 end
 
 function TableService:SitPlayer(player: Player, tableNumber: number, sitNumber: number)
@@ -129,6 +139,8 @@ function TableService:AddPlayerToTable(player: Player, tableNumber: number)
 		return 0
 	end
 
+	player:SetAttribute("PLAYER_SOLO", false)
+
 	-- Pega as cadeiras
 	local chair1, chair2 = table[1], table[2]
 
@@ -149,7 +161,6 @@ function TableService:AddPlayerToTable(player: Player, tableNumber: number)
 	tables[tableNumber][2].Player = player
 	TableService:SitPlayer(player, tableNumber, 2)
 
-	print("INICIANDO PARTIDA")
 	task.spawn(function()
 		MatchService:Create(tables[tableNumber][1].Player, tables[tableNumber][2].Player, tableNumber)
 	end)

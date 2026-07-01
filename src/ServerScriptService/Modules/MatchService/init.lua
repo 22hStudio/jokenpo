@@ -16,6 +16,25 @@ local HttpService = game:GetService("HttpService")
 local AnimationService = require(ServerScriptService.Modules.AnimationService)
 local CameraService = require(ServerScriptService.Modules.CameraService)
 local InGameScreensService = require(ServerScriptService.Modules.InGameScreensService)
+
+-- Posicao/rotacao de cada item na mao do personagem.
+-- Offset = posicao em studs relativa a mao direita.
+-- Rotation = rotacao em GRAUS relativa a mao direita.
+-- Ajuste estes valores para alinhar cada item (entre em Play, veja como ficou e refine).
+local HAND_ITEM_CONFIG = {
+	ROCK = {
+		Offset = Vector3.new(0, -0.5, -0.4),
+		Rotation = Vector3.new(0, 0, 0),
+	},
+	PAPER = {
+		Offset = Vector3.new(0, -0.5, -0.4),
+		Rotation = Vector3.new(90, 0, 0),
+	},
+	SCISSORS = {
+		Offset = Vector3.new(0, -0.5, -0.4),
+		Rotation = Vector3.new(90, 130, 0),
+	},
+}
 local matchs = {}
 
 function MatchService:Init()
@@ -44,18 +63,165 @@ function MatchService:ProcessAutomaticOption(player: Player)
 	return randomOption
 end
 
-function MatchService:ProcessOption(player: Player, option: string)
+function MatchService:ProcessOptionFromPlayerSolo(player: Player, option: string)
+	local match = MatchService:GetMatchFromPlayer(player)
+	local matchId = match.Id
+
 	if option ~= "ROCK" and option ~= "PAPER" and option ~= "SCISSORS" then
 		warn("INVALID OPTION ")
 		return
 	end
 
-	local match = MatchService:GetMatchFromPlayer(player)
-	local matchId = match.Id
 	if not match then
 		warn("MATCH NOT FOUND")
 		return
 	end
+
+	-- Atualiza com a opção
+	MatchService:UpdateMatch(matchId, { CurrentOptionPlayer1 = option, Processing = false })
+
+	-- Atualiza o indicador na cabeça do jogador
+	MatchService:SetInfoReadyToPlayer(player)
+
+	-- Desliga toda a ui
+	InGameScreensService:CloseAllScreenFromPlayerSolo(player)
+
+	task.wait(1)
+
+	MatchService:RemoveInfoReadyFromPlayer(player)
+
+	-- Roda a Animação do Jokenpo End
+	MatchService:RunJokeponEndAnimationFromPlayerSolo(player, match.NpcCharacter)
+
+	-- Mostra o Resultado na cabeça do jogador
+	MatchService:SetInfoOptionToPlayer(match.Player1, match.CurrentOptionPlayer1)
+	-- Seta o item na mao do jogador
+	MatchService:AddItemToCharacterHand(match.Player1.Character, match.CurrentOptionPlayer1)
+
+	-- Sorteia o resultado do npc, salva na partida e mostra na cabeça do npc
+	local npcOption = MatchService:DrawOptionFromIA()
+	MatchService:UpdateMatch(matchId, { CurrentOptionNpc = npcOption })
+	MatchService:SetInfoOptionToNpc(match.NpcCharacter, npcOption)
+	MatchService:AddItemToCharacterHand(match.NpcCharacter, npcOption)
+
+	local resultPlayer, resultName = MatchService:CalculateResultFromPlayerSolo(match)
+	local winners = match.Winners
+
+	task.wait(2)
+	MatchService:RemoveInfoOptionFromPlayer(match.Player1)
+	MatchService:RemoveInfoOptionFromNPC(match.NpcCharacter)
+
+	MatchService:RemoveItemFromCharacterHand(match.Player1.Character)
+	MatchService:RemoveItemFromCharacterHand(match.NpcCharacter)
+
+	-- Se tiver um ganhador Atualiza a Lista de Ganhadores
+	if resultPlayer then
+		table.insert(winners, resultPlayer)
+		MatchService:UpdateMatch(matchId, { Winners = winners })
+
+		local IsLastRound, winnerPlayer = MatchService:IsLastRound(winners, match.Target)
+		if IsLastRound then
+			local TableService = require(ServerScriptService.Modules.TableService)
+
+			-- Roda a Animação de vitória
+			print(resultPlayer)
+
+			MatchService:AddItemToCharacterHand(match.Player1.Character, match.CurrentOptionPlayer1)
+			MatchService:AddItemToCharacterHand(match.NpcCharacter, npcOption)
+
+			-- Vencedor foi o jogador
+			if resultPlayer == match.Player1.Character then
+				print("Alysson Ganhou")
+
+				AnimationService:PlayWinAnimation(
+					match.CurrentOptionPlayer1,
+					resultPlayer,
+					match.NpcCharacter,
+					"1",
+					match.TableNumber,
+					true
+				)
+			else
+				print("IA Ganhou")
+
+				-- Vencedor foi a  IA
+
+				-- Vencedor foi a  IA (perdedor = jogador; resultPlayer aqui e o NPC)
+				AnimationService:PlayWinAnimation(
+					match.CurrentOptionNpc,
+					match.NpcCharacter,
+					match.Player1.Character,
+					"2",
+					match.TableNumber,
+					true
+				)
+			end
+
+			-- Limpa as opções
+			MatchService:UpdateMatch(matchId, { CurrentOptionPlayer1 = false, CurrentOptionNpc = false })
+			MatchService:RemoveItemFromCharacterHand(match.Player1.Character)
+			MatchService:RemoveItemFromCharacterHand(match.NpcCharacter)
+
+			-- Tira os dois jogadores
+			TableService:RemovePlayerFromTable(match.Player1)
+			match.NpcCharacter:Destroy()
+
+			-- Deleta a Match
+			MatchService:RemoveMatch(matchId)
+
+			-- Mostra o Resultado
+			InGameScreensService:ShowMatchResultFromPlayerSolo(match.Player1, winnerPlayer)
+			return
+		end
+	end
+
+	-- Limpa as opções
+	MatchService:UpdateMatch(matchId, { CurrentOptionPlayer1 = false, CurrentOptionNpc = false })
+
+	task.wait(1)
+	-- Mostra o Resultado
+	InGameScreensService:ShowRoundResultFromPlayerSolo(match.Player1, resultName)
+
+	AnimationService:StopPlayerAnimations(match.Player1.Character)
+	AnimationService:StopPlayerAnimations(match.NpcCharacter)
+
+	task.wait(2)
+
+	-- Limpa a UI
+	InGameScreensService:CloseAllScreenFromPlayerSolo(match.Player1)
+
+	-- Roda a Animação
+	MatchService:RunJokeponAnimationFromPlayerSolo(match.Player1, match.NpcCharacter)
+
+	task.wait(3)
+
+	-- Atualiza o Round e libera o lock para a próxima rodada
+	MatchService:UpdateMatch(matchId, { CurrentRound = match.CurrentRound + 1, Resolving = false })
+
+	-- Exibe as opções para o jogador escolher
+	InGameScreensService:ShowOptionsFromPlayerSolor(match.Player1, match.Target, match.CurrentRound, winners)
+	MatchService:SetInfoReadyToNpc(match.NpcCharacter)
+end
+
+function MatchService:ProcessOption(player: Player, option: string)
+	local match = MatchService:GetMatchFromPlayer(player)
+	local matchId = match.Id
+
+	if option ~= "ROCK" and option ~= "PAPER" and option ~= "SCISSORS" then
+		warn("INVALID OPTION ")
+		return false
+	end
+
+	if not match then
+		warn("MATCH NOT FOUND")
+		return false
+	end
+	-- Verifica se o jogador está jogando contra a IA
+	if player:GetAttribute("PLAYER_SOLO") then
+		MatchService:ProcessOptionFromPlayerSolo(player, option)
+		return
+	end
+
 	local processing = match.Processing
 
 	while processing do
@@ -94,8 +260,6 @@ function MatchService:ProcessOption(player: Player, option: string)
 		MatchService:SetInfoReadyToPlayer(player)
 	end
 
-	task.wait(1)
-
 	-- Se tiver recebido as 2 respotas, da o resultado
 	match = MatchService:GetMatchFromPlayer(player)
 
@@ -121,6 +285,9 @@ function MatchService:ProcessOption(player: Player, option: string)
 		MatchService:SetInfoOptionToPlayer(match.Player1, match.CurrentOptionPlayer1)
 		MatchService:SetInfoOptionToPlayer(match.Player2, match.CurrentOptionPlayer2)
 
+		MatchService:AddItemToCharacterHand(match.Player1.Character, match.CurrentOptionPlayer1)
+		MatchService:AddItemToCharacterHand(match.Player2.Character, match.CurrentOptionPlayer2)
+
 		task.wait(1)
 
 		local resultPlayer, resultName = MatchService:CalculateResult(match)
@@ -130,6 +297,9 @@ function MatchService:ProcessOption(player: Player, option: string)
 		MatchService:UpdateMatch(matchId, { CurrentOptionPlayer1 = false, CurrentOptionPlayer2 = false })
 		MatchService:RemoveInfoOptionFromPlayer(match.Player1)
 		MatchService:RemoveInfoOptionFromPlayer(match.Player2)
+
+		MatchService:RemoveItemFromCharacterHand(match.Player1.Character)
+		MatchService:RemoveItemFromCharacterHand(match.Player2.Character)
 
 		-- Se tiver um ganhador Atualiza a Lista de Ganhadores
 		if resultPlayer then
@@ -153,7 +323,6 @@ function MatchService:ProcessOption(player: Player, option: string)
 			end
 		end
 
-		print("INICIANDO PROXIMA RODADA")
 		task.wait(1)
 		-- Mostra o Resultado
 		InGameScreensService:ShowRoundResult(match.Player1, match.Player2, resultName)
@@ -192,6 +361,28 @@ function MatchService:IsLastRound(winners, target)
 	end
 
 	return false, nil
+end
+
+function MatchService:CalculateResultFromPlayerSolo(match)
+	local player1Option = match.CurrentOptionPlayer1
+	local npcOption = match.CurrentOptionNpc
+
+	-- Empate
+	if player1Option == npcOption then
+		return nil, "DRAW"
+	end
+
+	-- Jogador 1 venceu
+	if
+		(player1Option == "ROCK" and npcOption == "SCISSORS")
+		or (player1Option == "SCISSORS" and npcOption == "PAPER")
+		or (player1Option == "PAPER" and npcOption == "ROCK")
+	then
+		return match.Player1.Parent and match.Player1.Character, match.Player1.Name or ""
+	end
+
+	-- Npc Venceu
+	return match.NpcCharacter, "IA"
 end
 
 function MatchService:CalculateResult(match)
@@ -275,6 +466,32 @@ function MatchService:SetInfoReadyToPlayer(player: Player)
 	billboard.Parent = head
 end
 
+function MatchService:SetInfoReadyToNpc(character)
+	local head = character:WaitForChild("Head")
+
+	-- Remove billboard antigo se existir
+	local existingBillboard = head:FindFirstChild("Ready")
+	if existingBillboard then
+		existingBillboard:Destroy()
+	end
+
+	-- Clona e coloca na cabeça
+	local billboard = ReplicatedStorage.GUI.BiilboardGui.READY:Clone()
+	billboard.Name = "Ready"
+	billboard.Adornee = head
+	billboard.Parent = head
+end
+
+function MatchService:RemoveInfoReadyFromNpc(character)
+	local head = character:WaitForChild("Head")
+
+	-- Remove billboard antigo se existir
+	local existingBillboard = head:FindFirstChild("Ready")
+	if existingBillboard then
+		existingBillboard:Destroy()
+	end
+end
+
 function MatchService:RemoveInfoReadyFromPlayer(player: Player)
 	if not player.Parent then
 		return
@@ -288,6 +505,22 @@ function MatchService:RemoveInfoReadyFromPlayer(player: Player)
 	if existingBillboard then
 		existingBillboard:Destroy()
 	end
+end
+
+function MatchService:SetInfoOptionToNpc(character, option: string)
+	local head = character:WaitForChild("Head")
+
+	-- Remove billboard antigo se existir
+	local existingBillboard = head:FindFirstChild("Ready")
+	if existingBillboard then
+		existingBillboard:Destroy()
+	end
+
+	-- Clona e coloca na cabeça
+	local billboard = ReplicatedStorage.GUI.BiilboardGui:FindFirstChild(option):Clone()
+	billboard.Name = "OPTION"
+	billboard.Adornee = head
+	billboard.Parent = head
 end
 
 function MatchService:SetInfoOptionToPlayer(player: Player, option: string)
@@ -310,6 +543,11 @@ function MatchService:SetInfoOptionToPlayer(player: Player, option: string)
 	billboard.Parent = head
 end
 
+function MatchService:DrawOptionFromIA()
+	local options = { "ROCK", "PAPER", "SCISSORS" }
+	return options[math.random(#options)]
+end
+
 function MatchService:RemoveInfoOptionFromPlayer(player: Player)
 	if not player.Parent then
 		return
@@ -323,6 +561,50 @@ function MatchService:RemoveInfoOptionFromPlayer(player: Player)
 	if existingBillboard then
 		existingBillboard:Destroy()
 	end
+end
+
+function MatchService:RemoveInfoOptionFromNPC(character)
+	local head = character:WaitForChild("Head")
+
+	-- Remove billboard antigo se existir
+	local existingBillboard = head:FindFirstChild("OPTION")
+	if existingBillboard then
+		existingBillboard:Destroy()
+	end
+end
+
+function MatchService:CreateFromPlayerSolo(player: Player, npcCharacter, tableNumber: number)
+	local data = {
+		Id = HttpService:GenerateGUID(false),
+		TableNumber = tableNumber,
+		Processing = false,
+		Target = 3,
+		CurrentRound = 1,
+		Player1 = player,
+		NpcCharacter = npcCharacter,
+		CurrentOptionPlayer1 = nil,
+		CurrentOptionNpc = nil,
+		Winners = {},
+	}
+
+	table.insert(matchs, data)
+
+	-- Informa ao jogador que a partida vai começar
+	InGameScreensService:ShowGameInitingFromPlayerSolo(player, 5)
+
+	-- Mostra a introdução dos jogadores na partida
+	InGameScreensService:ShowIntroducingPlayersFromPlayerSolo(player, 3.5, data.TableNumber)
+
+	-- Roda a animação de começo
+	MatchService:RunJokeponAnimationFromPlayerSolo(player, npcCharacter)
+
+	task.wait(3)
+
+	-- Indica que o NPC ja escolheu a sua opção
+	MatchService:SetInfoReadyToNpc(npcCharacter)
+
+	-- Exibe as opções para o jogador escolher
+	InGameScreensService:ShowOptionsFromPlayerSolor(player, data.Target, data.CurrentRound, data.Winners)
 end
 
 function MatchService:Create(player1: Player, player2: Player, tableNumber: number)
@@ -348,9 +630,6 @@ function MatchService:Create(player1: Player, player2: Player, tableNumber: numb
 	-- Mostra a introdução dos jogadores na partida
 	InGameScreensService:ShowIntroducingPlayers(player1, player2, 3.5, data.TableNumber)
 
-	-- Seta a Camera do jogador na posição de jogo
-	--CameraService:SetInGame(player1, player2, data.TableNumber)
-
 	-- Roda a Animação de Jokepon
 	MatchService:RunJokeponAnimation(player1, player2)
 
@@ -360,9 +639,9 @@ function MatchService:Create(player1: Player, player2: Player, tableNumber: numb
 	InGameScreensService:ShowOptions(player1, player2, data.Target, data.CurrentRound, data.Winners)
 end
 
-function MatchService:RunJokeponAnimation(player1: Player, player2: Player)
+function MatchService:RunJokeponAnimationFromPlayerSolo(player: Player, npcCharacter)
 	task.spawn(function()
-		AnimationService:PlayPlayerAnimation(player1, {
+		AnimationService:PlayPlayerAnimation(player.Character, {
 			{
 				AnimationType = "JOKENPO",
 				AnimationName = "START",
@@ -375,7 +654,7 @@ function MatchService:RunJokeponAnimation(player1: Player, player2: Player)
 	end)
 
 	task.spawn(function()
-		AnimationService:PlayPlayerAnimation(player2, {
+		AnimationService:PlayPlayerAnimation(npcCharacter, {
 			{
 				AnimationType = "JOKENPO",
 				AnimationName = "START",
@@ -388,9 +667,37 @@ function MatchService:RunJokeponAnimation(player1: Player, player2: Player)
 	end)
 end
 
-function MatchService:RunJokeponEndAnimation(player1: Player, player2: Player)
+function MatchService:RunJokeponAnimation(player1: Player, player2: Player)
 	task.spawn(function()
-		AnimationService:PlayPlayerAnimation(player1, {
+		AnimationService:PlayPlayerAnimationFromPlayer(player1, {
+			{
+				AnimationType = "JOKENPO",
+				AnimationName = "START",
+			},
+			{
+				AnimationType = "JOKENPO",
+				AnimationName = "LOOP_START",
+			},
+		})
+	end)
+
+	task.spawn(function()
+		AnimationService:PlayPlayerAnimationFromPlayer(player2, {
+			{
+				AnimationType = "JOKENPO",
+				AnimationName = "START",
+			},
+			{
+				AnimationType = "JOKENPO",
+				AnimationName = "LOOP_START",
+			},
+		})
+	end)
+end
+
+function MatchService:RunJokeponEndAnimationFromPlayerSolo(player1: Player, npcCharacter)
+	task.spawn(function()
+		AnimationService:PlayPlayerAnimation(player1.Character, {
 			{
 				AnimationType = "JOKENPO",
 				AnimationName = "END",
@@ -403,7 +710,35 @@ function MatchService:RunJokeponEndAnimation(player1: Player, player2: Player)
 	end)
 
 	task.spawn(function()
-		AnimationService:PlayPlayerAnimation(player2, {
+		AnimationService:PlayPlayerAnimation(npcCharacter, {
+			{
+				AnimationType = "JOKENPO",
+				AnimationName = "END",
+			},
+			{
+				AnimationType = "JOKENPO",
+				AnimationName = "LOOP_END",
+			},
+		})
+	end)
+end
+
+function MatchService:RunJokeponEndAnimation(player1: Player, player2: Player)
+	task.spawn(function()
+		AnimationService:PlayPlayerAnimationFromPlayer(player1, {
+			{
+				AnimationType = "JOKENPO",
+				AnimationName = "END",
+			},
+			{
+				AnimationType = "JOKENPO",
+				AnimationName = "LOOP_END",
+			},
+		})
+	end)
+
+	task.spawn(function()
+		AnimationService:PlayPlayerAnimationFromPlayer(player2, {
 			{
 				AnimationType = "JOKENPO",
 				AnimationName = "END",
@@ -439,6 +774,68 @@ function MatchService:RemoveMatch(matchId)
 	end
 
 	return false
+end
+
+function MatchService:AddItemToCharacterHand(character: Model, itemName: string)
+	local template = ReplicatedStorage.Models:FindFirstChild(itemName)
+	if not template then
+		warn("ITEM NAO ENCONTRADO: " .. tostring(itemName))
+		return
+	end
+
+	local rightHand = character:FindFirstChild("RightHand")
+	if not rightHand then
+		warn("RightHand nao encontrada em " .. character.Name)
+		return
+	end
+
+	-- Evita item duplicado na mao
+	MatchService:RemoveItemFromCharacterHand(character)
+
+	local item = template:Clone()
+	item.Name = "HAND_ITEM"
+
+	local handle = item.PrimaryPart
+	assert(handle, string.format("O modelo %s precisa ter um PrimaryPart.", itemName))
+
+	-- Offset/rotacao por item, definidos no codigo (HAND_ITEM_CONFIG no topo do modulo).
+	local config = HAND_ITEM_CONFIG[itemName] or DEFAULT_HAND_CONFIG
+	local offset = config.Offset
+	local rot = config.Rotation
+
+	local goalCFrame = rightHand.CFrame
+		* CFrame.new(offset)
+		* CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
+
+	item.Parent = character
+
+	-- Garante que TODAS as partes acompanhem a mao (sem ancora, sem colisao, sem peso).
+	-- A pedra estava ficando para tras porque a Union estava Anchored = true.
+	for _, part in item:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.Anchored = false
+			part.CanCollide = false
+			part.Massless = true
+		end
+	end
+
+	-- Move o MODELO INTEIRO de forma que o PrimaryPart fique exatamente na mao
+	-- (mantendo o offset das demais partes, ex.: as laminas da tesoura).
+	item:PivotTo(goalCFrame * handle.CFrame:ToObjectSpace(item:GetPivot()))
+
+	-- Solda o PrimaryPart na mao direita; as demais partes seguem pelos joints internos.
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = rightHand
+	weld.Part1 = handle
+	weld.Parent = handle
+end
+
+function MatchService:RemoveItemFromCharacterHand(character: Model)
+	local item = character:FindFirstChild("HAND_ITEM")
+
+	if item then
+		item:Destroy()
+	end
 end
 
 return MatchService

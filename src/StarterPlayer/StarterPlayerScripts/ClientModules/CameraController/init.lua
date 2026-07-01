@@ -30,6 +30,10 @@ function CameraController:InitBridgeListener()
 			local tableNumber = response.data.TableNumber
 			CameraController:ShowInGame(tableNumber)
 		end
+
+		if response[actionIdentifier] == "ShowCameraAnimation" then
+			CameraController:ShowCameraAnimation(response.data.TableNumber)
+		end
 	end)
 end
 
@@ -58,6 +62,42 @@ function CameraController:StopCamera()
 			camera.CameraSubject = humanoid
 		end
 	end
+end
+
+function CameraController:ShowCameraAnimation(tableNumber: number)
+	self:StopCamera()
+
+	local camera = workspace.CurrentCamera
+	camera.CameraType = Enum.CameraType.Scriptable
+	camera.FieldOfView = 75
+
+	-- O servidor cria um clone do CameraRig dentro da pasta Animation da mesa.
+	-- Esperamos ele aparecer e seguimos a Part CameraRoot (animada pelo servidor).
+	local animationFolder =
+		ClientUtil:WaitForDescendants(workspace, "Map", "GameTables", tableNumber, "Cameras", "Animation")
+
+	local rig = animationFolder:WaitForChild("CameraRig", 5)
+	if not rig then
+		warn("[CAM] CameraRig nao encontrado na mesa " .. tostring(tableNumber))
+		return
+	end
+
+	local cameraRoot = rig:WaitForChild("CameraRoot", 5)
+	if not cameraRoot then
+		warn("[CAM] CameraRoot nao encontrado no CameraRig")
+		return
+	end
+
+	-- Segue a Part animada a cada frame. Quando o servidor destroi o rig
+	-- (fim da cutscene), a camera volta ao normal (StopCamera).
+	self.CurrentRenderConnection = RunService.RenderStepped:Connect(function()
+		if not cameraRoot.Parent or not rig.Parent then
+			self:StopCamera()
+			return
+		end
+
+		camera.CFrame = cameraRoot.CFrame
+	end)
 end
 
 function CameraController:ShowWaitingForPlayerCamera(tableNumber: number)

@@ -28,4 +28,29 @@ function CameraService:SetInGame(player1: Player, player2: Player, tableNumber: 
 	})
 end
 
+function CameraService:ShowCameraAnimationFromPlayerSolo(player1: Player, tableNumber: number)
+	bridge:Fire(player1, {
+		[actionIdentifier] = "ShowCameraAnimation",
+		data = {
+			TableNumber = tableNumber,
+		},
+	})
+end
+
+function CameraService:ShowCameraAnimation(player1: Player, player2: Player, tableNumber: number)
+	bridge:Fire(player1, {
+		[actionIdentifier] = "ShowCameraAnimation",
+		data = {
+			TableNumber = tableNumber,
+		},
+	})
+
+	bridge:Fire(player2, {
+		[actionIdentifier] = "ShowCameraAnimation",
+		data = {
+			TableNumber = tableNumber,
+		},
+	})
+end
+
 return CameraService
